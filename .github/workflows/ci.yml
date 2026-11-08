@@ -1,0 +1,235 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, develop]
+    tags:
+      - '*'
+  pull_request:
+    branches: [master, main, develop]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. V4.1) — leave empty to use pushed tag'
+        required: false
+        default: ''
+
+jobs:
+  frontend:
+    name: Frontend - Type Check, Lint, Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./vue
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "./vue/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build web
+        run: npm run build-web
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: data/www
+          retention-days: 1
+
+  backend:
+    name: Backend - PlatformIO (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    needs: frontend
+
+    strategy:
+      fail-fast: false
+      matrix:
+        env:
+          - esp32
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Cache platformio
+        uses: actions/cache@v3
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-${{ hashFiles('**/platformio.ini') }}-v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: data/www
+
+      - name: List data folder
+        run: ls -la data/www/ && ls -la data/www/assets/ || true
+
+      - name: Build firmware
+        run: pio run -e ${{ matrix.env }}
+
+      - name: Build filesystem
+        run: pio run -e ${{ matrix.env }} -t buildfs
+
+      - name: Rename firmware files
+        run: |
+          cp build/${{ matrix.env }}/firmware.bin ${{ matrix.env }}_firmware.bin
+          if [ -f build/${{ matrix.env }}/littlefs.bin ]; then
+            cp build/${{ matrix.env }}/littlefs.bin ${{ matrix.env }}_littlefs.bin
+          fi
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.env }}
+          path: |
+            ${{ matrix.env }}_firmware.bin
+            ${{ matrix.env }}_littlefs.bin
+          if-no-files-found: warn
+          retention-days: 30
+
+  scriptrunner:
+    name: ScriptRunner - Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [g++, clang++]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install compilers
+        run: sudo apt-get install -y g++ clang
+
+      - name: Build tests (${{ matrix.compiler }})
+        working-directory: src/tests
+        run: ${{ matrix.compiler }} -std=c++11 -I../src -o test_runner test_runner.cpp arduino_stub.cpp ../runner/ScriptRunner.cpp
+
+      - name: Run tests (${{ matrix.compiler }})
+        working-directory: src/tests
+        run: ./test_runner
+
+  release:
+    name: Release firmware
+    runs-on: ubuntu-latest
+    needs: [backend, scriptrunner]
+    if: |
+      (github.event_name == 'push' && github.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
+
+    steps:
+      - name: Set release tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          path: release
+          merge-multiple: true
+
+      - name: Create firmware.json
+        run: |
+          VERSION="${{ steps.vars.outputs.tag }}"
+          TAG="${{ steps.vars.outputs.tag }}"
+          REPO="https://github.com/${GITHUB_REPOSITORY}"
+
+          echo "{" > release.json
+          echo "  \"version\": \"$VERSION\"," >> release.json
+          echo "  \"tag\": \"$TAG\"," >> release.json
+          echo "  \"files\": {" >> release.json
+
+          first=true
+          for f in release/*.bin; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .bin)
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo "," >> release.json
+            fi
+            printf "    \"%s\": \"%s/releases/download/%s/%s\"" "$name" "$REPO" "$TAG" "$(basename "$f")" >> release.json
+          done
+
+          echo "" >> release.json
+          echo "  }" >> release.json
+          echo "}" >> release.json
+
+          cat release.json
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          files: |
+            release/*.bin
+            release.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if README exists
+        run: |
+          if [ -f README.md ]; then
+            echo "README.md found"
+          else
+            echo "README.md not found"
+            exit 1
+          fi
+
+      - name: Check if package.json is valid JSON
+        run: cat vue/package.json | jq . >/dev/null
+
+      - name: Check if platformio.ini exists
+        run: |
+          if [ -f platformio.ini ]; then
+            echo "platformio.ini found"
+          else
+            echo "platformio.ini not found"
+            exit 1
+          fi

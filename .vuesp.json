@@ -1,0 +1,22 @@
+{
+  "$schema": "https://vuesp.ru/schema/vuesp-project.json",
+  "name": "vuesp.espnow-hub",
+  "summary": "ESP-NOW hub that receives events from clients and forwards them to the local Vuesp Hub server.",
+  "description": "## Vuesp ESP-NOW Hub\n\nESP32 hub for ESP-NOW clients. Receives VLP/1 frames, keeps a peer table, queues events and forwards them as JSON to the local `vuesp-hub` server over HTTP.",
+  "platforms": [
+    "ESP32"
+  ],
+  "tags": [
+    "esp-now",
+    "hub",
+    "esp32",
+    "vuesp"
+  ],
+  "createdWith": "vuesp-create@1.0.1",
+  "createdAt": "2026-11-08T21:14:44.657Z",
+  "template": {
+    "source": "local",
+    "ref": "local",
+    "commit": "8ebddcfc6f90135d6b2c1532c29eac0fd293f4ae"
+  }
+}

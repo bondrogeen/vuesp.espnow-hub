@@ -1,0 +1,54 @@
+.pio
+.vscode
+*/node_modules
+/build
+.env
+.env.local
+.env.*.local
+
+# IDE
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependencies
+node_modules/
+/firmware/
+dist/
+.turbo/
+
+# Firmware builds
+/firmware/*.bin
+/firmware/*.elf
+/data/
+
+# Local architecture notes, not distributed with the firmware
+/docs/
+
+# Local agent instructions
+/AGENTS.md
+
+# Build artifacts that must not be committed
+*.tsbuildinfo
+src/tests/test_runner
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local-only files
+vue/.env.screen
+
+# Public demo build output
+/demo-dist/

@@ -1,0 +1,4 @@
+0:boot:call(1);
+1:test1:$p13=255;wait(1s);$p13=0;wait(1s);
+2:test2:$p13=0;
+3:test3:$p13=255;

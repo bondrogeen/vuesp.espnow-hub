@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recovery</title>
+    <style>
+      html,
+      body,
+      main {
+        height: 100%;
+      }
+      .d-flex {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      .form {
+        min-width: 360px;
+      }
+      .form__title {
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 20px;
+      }
+      .form__item {
+        margin-bottom: 30px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .form__label {
+        flex: 1 1 auto;
+      }
+      .form__input {
+        opacity: 0;
+        visibility: hidden;
+        position: absolute;
+      }
+      .form__btn {
+        flex: 0 0 50px;
+        padding: 10px 20px;
+        border-radius: 4px;
+        border: 1px solid #24c0eb;
+        font-size: 16px;
+        background-color: white;
+        cursor: pointer;
+      }
+      .grey-text {
+        color: grey;
+      }
+      .overlay {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        left: 0;
+        top: 0;
+        background-color: #000000aa;
+        display: none;
+      }
+      .overlay p {
+        color: #fff;
+      }
+      .spinner {
+        height: 50px;
+        width: 50px;
+        border: 3px solid #24c0eb;
+        border-top: 3px solid transparent;
+        border-radius: 50%;
+        animation: spinner 1s linear infinite;
+      }
+
+      @keyframes spinner {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="main d-flex">
+      <div class="overlay d-flex">
+        <div class="spinner"></div>
+        <p class="form__title">Loading...</p>
+      </div>
+      <div class="form">
+        <div class="form__title">Firmware:</div>
+        <div class="form__item">
+          <label class="form__label">
+            <input class="form__input" type="file" name="frimware" accept=".bin" onchange="onChange(this,'frimware')" />
+            <span class="grey-text" name="frimware">Select a file...</span>
+          </label>
+          <input class="form__btn" type="submit" value="Update" onclick="onUpdate('frimware')" />
+        </div>
+        <div class="form__title">Littlefs:</div>
+        <div class="form__item">
+          <label class="form__label">
+            <input class="form__input" type="file" name="littlefs" accept=".bin" onchange="onChange(this,'littlefs')" />
+            <span class="grey-text" name="littlefs">Select a file...</span>
+          </label>
+          <input class="form__btn" type="submit" value="Update" onclick="onUpdate('littlefs')" />
+        </div>
+      </div>
+      <div>
+        Firmware:
+        <span class="grey-text">ver (0.0.6)</span>
+      </div>
+    </main>
+    <script>
+      function qs(e) {
+        return document.querySelector(e);
+      }
+      function onChange(e, name) {
+        const span = qs('span[name="' + name + '"]');
+        span.innerHTML = e.files[0].name;
+      }
+      function onUpdate(name) {
+        const input = qs('input[name="' + name + '"]');
+        if (input.files.length) {
+          const formData = new FormData();
+          formData.append(name, input.files[0], name + '.bin');
+          const req = new XMLHttpRequest();
+          req.addEventListener('loadend', () => {
+            qs('.overlay p').innerHTML = 'Reboot...';
+            window.location.href = '/';
+          });
+          req.open('POST', '/update');
+          req.send(formData);
+          qs('.overlay').style.display = 'flex';
+        } else {
+          alert('Select file');
+        }
+      }
+    </script>
+  </body>
+</html>
